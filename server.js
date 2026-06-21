@@ -62,7 +62,7 @@ function connectToKisWs() {
     
     kisWs.on('open', () => {
         console.log('✅ KIS 실시간 서버 연결됨');
-        // 실전투자 국내업종 지수 실시간 체결가 구독 (코스피: 0001)
+        // 실전투자 국내업종 지수 실시간 체결가 구독 (코스피: 001)
         const req = {
             header: {
                 approval_key: wsApprovalKey,
@@ -73,7 +73,7 @@ function connectToKisWs() {
             body: {
                 input: {
                     tr_id: "H0UPCNT0", // 국내지수 실시간체결
-                    tr_key: "0001"     // 코스피 지수
+                    tr_key: "001"      // 코스피 지수 (001)
                 }
             }
         };
@@ -137,50 +137,50 @@ app.get('/api/history/:id', async (req, res) => {
     else return res.json([]); // 해외 지수 등은 빈 배열 반환 (가상 데이터 대체를 위해)
 
     try {
-        const url = `${KIS_API_URL}/uapi/domestic-stock/v1/quotations/inquire-index-time-resolution`;
+        // 국내업종 기간별 시세 (일봉)
+        const url = `${KIS_API_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice`;
         const resp = await axios.get(url, {
             headers: {
                 'content-type': 'application/json; charset=utf-8',
                 'authorization': `Bearer ${accessToken}`,
                 'appkey': APP_KEY,
                 'appsecret': APP_SECRET,
-                'tr_id': 'FHKUP02500100'
+                'tr_id': 'FHKUP03500100'
             },
             params: {
                 FID_COND_MRKT_DIV_CODE: 'U',
                 FID_INPUT_ISCD: iscd,
-                FID_HOUR_CLS_CODE: '1', // 1분봉
-                FID_PW_DATA_INCU_YN: 'Y'
+                FID_INPUT_DATE_1: '20260101', // 적당히 과거 날짜
+                FID_INPUT_DATE_2: '20260621', // 오늘 날짜 넉넉히
+                FID_PERIOD_DIV_CODE: 'D' // D: 일봉
             }
         });
 
         const history = [];
         if (resp.data && resp.data.output2) {
             const list = resp.data.output2;
-            // KIS API는 최신순으로 반환하므로 역순으로 차트에 삽입
             for(let i = list.length - 1; i >= 0; i--) {
                 const item = list[i];
-                if (!item.stck_prpr) continue;
+                if (!item.bstp_nmix_prpr) continue;
                 
                 const y = item.stck_bsop_date.substring(0, 4);
                 const m = item.stck_bsop_date.substring(4, 6);
                 const d = item.stck_bsop_date.substring(6, 8);
-                const h = item.stck_cntg_hour.substring(0, 2);
-                const min = item.stck_cntg_hour.substring(2, 4);
-                const s = item.stck_cntg_hour.substring(4, 6);
                 
-                // 한국 시간 기준 timestamp (차트 라이브러리용)
-                const timeStr = `${y}-${m}-${d}T${h}:${min}:${s}+09:00`;
+                // 한국 시간 자정 기준 timestamp
+                const timeStr = `${y}-${m}-${d}T00:00:00+09:00`;
                 const time = Math.floor(new Date(timeStr).getTime() / 1000);
                 
                 history.push({
                     time: time,
-                    open: parseFloat(item.stck_oprc),
-                    high: parseFloat(item.stck_hgpr),
-                    low: parseFloat(item.stck_lwpr),
-                    close: parseFloat(item.stck_prpr)
+                    open: parseFloat(item.bstp_nmix_oprc),
+                    high: parseFloat(item.bstp_nmix_hgpr),
+                    low: parseFloat(item.bstp_nmix_lwpr),
+                    close: parseFloat(item.bstp_nmix_prpr)
                 });
             }
+        } else {
+            console.error('KIS API Response:', resp.data);
         }
         res.json(history);
     } catch (err) {
