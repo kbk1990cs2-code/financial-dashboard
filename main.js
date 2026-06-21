@@ -3,7 +3,7 @@ import { createChart, CrosshairMode } from 'lightweight-charts';
 // 지수 메타데이터 및 상태
 const indices = [
     { id: 'kospi200n', name: 'KOSPI 200 야간', sub: 'Night Futures', basePrice: 345.20, volatility: 0.4 },
-    { id: 'kospi', name: '코스피', sub: 'KOSPI', basePrice: 2750.30, volatility: 2.5 },
+    { id: 'kospi', name: '코스피200(KODEX)', sub: 'KODEX 200 ETF', basePrice: 38000, volatility: 50 },
     { id: 'kosdaq', name: '코스닥', sub: 'KOSDAQ', basePrice: 900.50, volatility: 1.5 },
     { id: 'sp500', name: 'S&P 500', sub: 'US Index', basePrice: 5102.30, volatility: 4.0 },
     { id: 'nasdaq', name: 'NASDAQ 100', sub: 'US Tech', basePrice: 17850.10, volatility: 15.0 },

@@ -62,18 +62,18 @@ function connectToKisWs() {
     
     kisWs.on('open', () => {
         console.log('✅ KIS 실시간 서버 연결됨');
-        // 실전투자 국내업종 지수 실시간 체결가 구독 (코스피: 001)
+        // KOSPI 지수 추종 ETF(KODEX 200)로 완벽하게 주식 API 호환
         const req = {
             header: {
                 approval_key: wsApprovalKey,
                 custtype: "P",
-                tr_type: "1", // 1: 등록, 2: 해제
+                tr_type: "1",
                 "content-type": "utf-8"
             },
             body: {
                 input: {
-                    tr_id: "H0UPCNT0", // 국내지수 실시간체결
-                    tr_key: "001"      // 코스피 지수 (001)
+                    tr_id: "H0STCNT0", // 국내주식 실시간 체결
+                    tr_key: "069500"   // KODEX 200
                 }
             }
         };
@@ -82,22 +82,21 @@ function connectToKisWs() {
 
     kisWs.on('message', (data) => {
         const msg = data.toString('utf-8');
-        
-        // PING/PONG 처리
-        if (msg.includes('PINGPONG')) {
-            // KIS 서버에서 핑이 오면 무시하거나 퐁 처리
+        console.log("WS MSG:", msg);
+        if (msg.includes('PING')) {
+            kisWs.pong();
             return;
         }
 
-        // 실시간 지수 체결 데이터 파싱
-        // 예: 0|H0UPCNT0|001|0001^104840^2581.68^2^...
+        // 실시간 체결 데이터 파싱
+        // 예: 0|H0STCNT0|001|069500^...
         const parts = msg.split('|');
         if (parts.length >= 4) {
             const trid = parts[1];
-            if (trid === 'H0UPCNT0') {
+            if (trid === 'H0STCNT0') {
                 const dataParts = parts[3].split('^');
                 if (dataParts.length > 2) {
-                    const price = parseFloat(dataParts[2]); // 현재가 지수
+                    const price = parseFloat(dataParts[2]); // 현재가
                     
                     // 클라이언트(프론트엔드)로 데이터 브로드캐스팅
                     const payload = JSON.stringify({ type: 'price_update', id: 'kospi', price: price });
@@ -125,62 +124,57 @@ function connectToKisWs() {
 getAccessToken();
 getApprovalKey();
 
-// 과거 데이터(분봉) 조회 API 엔드포인트
+// 과거 데이터(분봉/일봉) 조회 API 엔드포인트
 app.get('/api/history/:id', async (req, res) => {
     if (!accessToken) return res.status(500).json({ error: 'Token not ready' });
     
     const id = req.params.id;
     let iscd = '';
-    // 현재 코스피, 코스닥만 KIS 국내지수 API(FHKUP02500100)로 지원
-    if (id === 'kospi') iscd = '0001';
-    else if (id === 'kosdaq') iscd = '1001';
-    else return res.json([]); // 해외 지수 등은 빈 배열 반환 (가상 데이터 대체를 위해)
+    // 코스피를 KODEX 200 ETF로 매핑하여 조회
+    if (id === 'kospi') iscd = '069500';
+    else return res.json([]);
 
     try {
-        // 국내업종 기간별 시세 (일봉)
-        const url = `${KIS_API_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice`;
+        // 국내주식 일별 시세 API
+        const url = `${KIS_API_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price`;
         const resp = await axios.get(url, {
             headers: {
                 'content-type': 'application/json; charset=utf-8',
                 'authorization': `Bearer ${accessToken}`,
                 'appkey': APP_KEY,
                 'appsecret': APP_SECRET,
-                'tr_id': 'FHKUP03500100'
+                'tr_id': 'FHKST01010400'
             },
             params: {
-                FID_COND_MRKT_DIV_CODE: 'U',
+                FID_COND_MRKT_DIV_CODE: 'J',
                 FID_INPUT_ISCD: iscd,
-                FID_INPUT_DATE_1: '20260101', // 적당히 과거 날짜
-                FID_INPUT_DATE_2: '20260621', // 오늘 날짜 넉넉히
-                FID_PERIOD_DIV_CODE: 'D' // D: 일봉
+                FID_PERIOD_DIV_CODE: 'D', // 일봉
+                FID_ORG_ADJ_PRC: '0'
             }
         });
 
         const history = [];
-        if (resp.data && resp.data.output2) {
-            const list = resp.data.output2;
+        if (resp.data && resp.data.output) {
+            const list = resp.data.output;
             for(let i = list.length - 1; i >= 0; i--) {
                 const item = list[i];
-                if (!item.bstp_nmix_prpr) continue;
+                if (!item.stck_clpr) continue;
                 
                 const y = item.stck_bsop_date.substring(0, 4);
                 const m = item.stck_bsop_date.substring(4, 6);
                 const d = item.stck_bsop_date.substring(6, 8);
                 
-                // 한국 시간 자정 기준 timestamp
                 const timeStr = `${y}-${m}-${d}T00:00:00+09:00`;
                 const time = Math.floor(new Date(timeStr).getTime() / 1000);
                 
                 history.push({
                     time: time,
-                    open: parseFloat(item.bstp_nmix_oprc),
-                    high: parseFloat(item.bstp_nmix_hgpr),
-                    low: parseFloat(item.bstp_nmix_lwpr),
-                    close: parseFloat(item.bstp_nmix_prpr)
+                    open: parseFloat(item.stck_oprc),
+                    high: parseFloat(item.stck_hgpr),
+                    low: parseFloat(item.stck_lwpr),
+                    close: parseFloat(item.stck_clpr)
                 });
             }
-        } else {
-            console.error('KIS API Response:', resp.data);
         }
         res.json(history);
     } catch (err) {
