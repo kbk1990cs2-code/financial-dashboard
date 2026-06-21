@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>프리미엄 금융 대시보드</title>
+  <link rel="stylesheet" href="./style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar left-sidebar">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <h1>TRADE PRO</h1>
+      </div>
+      
+      <div class="menu-section">
+        <h2 class="menu-title">주요 지수</h2>
+        <ul class="asset-list" id="asset-list">
+          <!-- JS 렌더링 영역 -->
+        </ul>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-header">
+        <div class="header-asset-info">
+          <h2>KOSPI 200 야간선물</h2>
+          <div class="header-price up">
+            <span class="current-price" id="header-price-val">345.20</span>
+            <span class="price-change" id="header-price-change">+1.25 (0.36%)</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary">1m</button>
+          <button class="btn btn-secondary">5m</button>
+          <button class="btn btn-secondary active">15m</button>
+          <button class="btn btn-secondary">1H</button>
+          <button class="btn btn-primary">Trade</button>
+        </div>
+      </header>
+      
+      <div class="chart-container">
+        <div id="tv-chart"></div>
+      </div>
+    </main>
+
+    <aside class="sidebar right-sidebar">
+      <div class="order-book-section">
+        <h2 class="menu-title">실시간 호가</h2>
+        <div class="order-book">
+          <div class="order-row header">
+            <span>가격</span>
+            <span>잔량</span>
+          </div>
+          <!-- 매도 호가 (Asks) -->
+          <div class="order-asks" id="order-asks"></div>
+          
+          <div class="order-spread">
+            <span class="current-spread">345.20</span>
+          </div>
+          
+          <!-- 매수 호가 (Bids) -->
+          <div class="order-bids" id="order-bids"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
