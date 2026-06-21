@@ -16,42 +16,14 @@ const globalTime = Math.floor(Date.now() / 1000);
 // 데이터 상태 저장소
 const appState = {};
 
-// 초기 과거 데이터 생성 로직
-const generateHistoricalData = (basePrice, volatilityConfig) => {
-    const data = [];
-    let p = basePrice;
-    let t = globalTime - (100 * 60); // 100분 전
-    
-    for(let i = 0; i < 100; i++) {
-        const volatility = (Math.random() - 0.5) * volatilityConfig * 3;
-        const open = p;
-        const close = p + volatility;
-        const high = Math.max(open, close) + Math.random() * volatilityConfig;
-        const low = Math.min(open, close) - Math.random() * volatilityConfig;
-        
-        data.push({
-            time: t,
-            open,
-            high,
-            low,
-            close
-        });
-        
-        p = close;
-        t += 60; // 1분 간격
-    }
-    return data;
-};
-
-// 모든 지수에 대해 초기 데이터 셋업
+// 모든 지수에 대해 빈 데이터 셋업
 indices.forEach(idx => {
-    const data = generateHistoricalData(idx.basePrice, idx.volatility);
     appState[idx.id] = {
         meta: idx,
-        data: data,
-        currentPrice: data[data.length - 1].close,
-        openPrice: data[0].open,
-        lastCandle: { ...data[data.length - 1] }
+        data: [],
+        currentPrice: idx.basePrice,
+        openPrice: idx.basePrice,
+        lastCandle: null
     };
 });
 
@@ -186,17 +158,70 @@ const updateOrderBook = (centerPrice) => {
     }
 };
 
+// 과거 데이터 패치 함수
+const fetchHistory = async (id) => {
+    const state = appState[id];
+    try {
+        // 백엔드 URL 동적 감지 (현재 Vercel 배포 시 프록시 서버 주소 사용)
+        const backendUrl = import.meta.env.VITE_WS_URL 
+            ? import.meta.env.VITE_WS_URL.replace('ws', 'http') 
+            : 'http://localhost:8080';
+            
+        const res = await fetch(`${backendUrl}/api/history/${id}`);
+        const data = await res.json();
+        
+        if (data && data.length > 0) {
+            state.data = data;
+            state.currentPrice = data[data.length - 1].close;
+            state.openPrice = data[0].open;
+            state.lastCandle = { ...data[data.length - 1] };
+        } else {
+            // 코스피/코스닥 외의 지수는 임시 가상 데이터로 대체 (REST 미지원 대응)
+            const fallbackData = [];
+            let p = state.meta.basePrice;
+            let t = globalTime - (100 * 60);
+            for(let i = 0; i < 100; i++) {
+                const vol = (Math.random() - 0.5) * state.meta.volatility * 3;
+                const open = p, close = p + vol;
+                fallbackData.push({
+                    time: t, open, close,
+                    high: Math.max(open, close) + Math.random(),
+                    low: Math.min(open, close) - Math.random()
+                });
+                p = close; t += 60;
+            }
+            state.data = fallbackData;
+            state.currentPrice = fallbackData[fallbackData.length - 1].close;
+            state.openPrice = fallbackData[0].open;
+            state.lastCandle = { ...fallbackData[fallbackData.length - 1] };
+        }
+        
+        // 현재 선택된 지수라면 UI 업데이트
+        if (activeIndexId === id) {
+            candlestickSeries.setData(state.data);
+            updateHeaderPrice(state);
+            renderSidebar();
+        }
+    } catch (e) {
+        console.error('과거 데이터 불러오기 실패:', e);
+    }
+};
+
 // 활성 지수 변경
 const switchActiveIndex = (id) => {
     activeIndexId = id;
     const state = appState[id];
     
-    // 차트 데이터 교체
-    candlestickSeries.setData(state.data);
-    
-    renderSidebar();
-    updateHeaderPrice(state);
-    updateOrderBook(state.currentPrice);
+    if (state.data.length === 0) {
+        // 아직 과거 데이터를 안 가져왔으면 패치
+        fetchHistory(id);
+    } else {
+        // 차트 데이터 교체
+        candlestickSeries.setData(state.data);
+        renderSidebar();
+        updateHeaderPrice(state);
+        updateOrderBook(state.currentPrice);
+    }
 };
 
 // 초기 렌더링
@@ -228,10 +253,11 @@ setInterval(() => {
     // 모든 지수 업데이트
     indices.forEach(idx => {
         const state = appState[idx.id];
+        // 데이터가 없으면 아직 로딩 안된 상태이므로 스킵
+        if (state.data.length === 0 || !state.lastCandle) return;
         
-        // kospi(삼성전자 예시) 등 실제 데이터가 들어오는 경우 틱을 더하지 않음
-        // 여기서는 부드러운 움직임을 위해 가상 틱을 섞지만 실제 값이 들어오면 맞춰짐
-        if (idx.id !== 'kospi') {
+        // kospi, kosdaq 등 실제 데이터가 들어오는 경우 틱을 더하지 않음
+        if (idx.id !== 'kospi' && idx.id !== 'kosdaq') {
             const tick = (Math.random() - 0.5) * state.meta.volatility;
             state.currentPrice += tick;
         }

@@ -19,7 +19,23 @@ const APP_KEY = process.env.KIS_APP_KEY;
 const APP_SECRET = process.env.KIS_APP_SECRET;
 
 let wsApprovalKey = null;
+let accessToken = null;
 let kisWs = null;
+
+// KIS Access Token (REST API 용) 발급 함수
+async function getAccessToken() {
+    try {
+        const response = await axios.post(`${KIS_API_URL}/oauth2/tokenP`, {
+            grant_type: 'client_credentials',
+            appkey: APP_KEY,
+            appsecret: APP_SECRET
+        });
+        accessToken = response.data.access_token;
+        console.log('✅ KIS Access Token 발급 성공');
+    } catch (error) {
+        console.error('❌ KIS Access Token 발급 실패:', error.response ? error.response.data : error.message);
+    }
+}
 
 // KIS WebSocket 접속키 발급 함수
 async function getApprovalKey() {
@@ -106,7 +122,72 @@ function connectToKisWs() {
 }
 
 // 초기 키 발급 실행
+getAccessToken();
 getApprovalKey();
+
+// 과거 데이터(분봉) 조회 API 엔드포인트
+app.get('/api/history/:id', async (req, res) => {
+    if (!accessToken) return res.status(500).json({ error: 'Token not ready' });
+    
+    const id = req.params.id;
+    let iscd = '';
+    // 현재 코스피, 코스닥만 KIS 국내지수 API(FHKUP02500100)로 지원
+    if (id === 'kospi') iscd = '0001';
+    else if (id === 'kosdaq') iscd = '1001';
+    else return res.json([]); // 해외 지수 등은 빈 배열 반환 (가상 데이터 대체를 위해)
+
+    try {
+        const url = `${KIS_API_URL}/uapi/domestic-stock/v1/quotations/inquire-index-time-resolution`;
+        const resp = await axios.get(url, {
+            headers: {
+                'content-type': 'application/json; charset=utf-8',
+                'authorization': `Bearer ${accessToken}`,
+                'appkey': APP_KEY,
+                'appsecret': APP_SECRET,
+                'tr_id': 'FHKUP02500100'
+            },
+            params: {
+                FID_COND_MRKT_DIV_CODE: 'U',
+                FID_INPUT_ISCD: iscd,
+                FID_HOUR_CLS_CODE: '1', // 1분봉
+                FID_PW_DATA_INCU_YN: 'Y'
+            }
+        });
+
+        const history = [];
+        if (resp.data && resp.data.output2) {
+            const list = resp.data.output2;
+            // KIS API는 최신순으로 반환하므로 역순으로 차트에 삽입
+            for(let i = list.length - 1; i >= 0; i--) {
+                const item = list[i];
+                if (!item.stck_prpr) continue;
+                
+                const y = item.stck_bsop_date.substring(0, 4);
+                const m = item.stck_bsop_date.substring(4, 6);
+                const d = item.stck_bsop_date.substring(6, 8);
+                const h = item.stck_cntg_hour.substring(0, 2);
+                const min = item.stck_cntg_hour.substring(2, 4);
+                const s = item.stck_cntg_hour.substring(4, 6);
+                
+                // 한국 시간 기준 timestamp (차트 라이브러리용)
+                const timeStr = `${y}-${m}-${d}T${h}:${min}:${s}+09:00`;
+                const time = Math.floor(new Date(timeStr).getTime() / 1000);
+                
+                history.push({
+                    time: time,
+                    open: parseFloat(item.stck_oprc),
+                    high: parseFloat(item.stck_hgpr),
+                    low: parseFloat(item.stck_lwpr),
+                    close: parseFloat(item.stck_prpr)
+                });
+            }
+        }
+        res.json(history);
+    } catch (err) {
+        console.error('❌ History fetch error:', err.response?.data || err.message);
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
 
 // 클라이언트(웹) 접속 처리
 wss.on('connection', (ws) => {
