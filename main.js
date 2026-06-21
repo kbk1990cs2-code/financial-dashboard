@@ -2,15 +2,21 @@ import { createChart, CrosshairMode } from 'lightweight-charts';
 
 // 지수 메타데이터 및 상태
 const indices = [
-    { id: 'kospi200n', name: 'KOSPI 200 야간', sub: 'Night Futures', basePrice: 345.20, volatility: 0.4 },
-    { id: 'kospi', name: '코스피200(KODEX)', sub: 'KODEX 200 ETF', basePrice: 38000, volatility: 50 },
-    { id: 'kosdaq', name: '코스닥', sub: 'KOSDAQ', basePrice: 900.50, volatility: 1.5 },
-    { id: 'sp500', name: 'S&P 500', sub: 'US Index', basePrice: 5102.30, volatility: 4.0 },
-    { id: 'nasdaq', name: 'NASDAQ 100', sub: 'US Tech', basePrice: 17850.10, volatility: 15.0 },
-    { id: 'dow', name: '다우존스', sub: 'Dow Jones', basePrice: 39000.50, volatility: 20.0 }
+    { id: 'kospi', name: '코스피200(KODEX)', sub: 'KODEX 200 ETF (069500)', basePrice: 38000, volatility: 50 },
+    { id: 'nasdaq', name: '나스닥100(TIGER)', sub: 'TIGER 미국나스닥100 (133690)', basePrice: 95000, volatility: 200 },
+    { id: 'snp500', name: 'S&P500(TIGER)', sub: 'TIGER 미국S&P500 (360750)', basePrice: 15000, volatility: 50 },
+    { id: 'dow', name: '다우존스(TIGER)', sub: 'TIGER 미국다우존스30 (245340)', basePrice: 22000, volatility: 80 },
+    { id: 'dax', name: '유로스탁스50(TIGER)', sub: 'TIGER 유로스탁스50 (195930)', basePrice: 13000, volatility: 40 },
+    { id: 'nikkei', name: '니케이225(TIGER)', sub: 'TIGER 일본니케이225 (241180)', basePrice: 25000, volatility: 100 }
 ];
 
-let activeIndexId = 'kospi200n';
+let activeIndexId = 'kospi';
+let activeTimeframe = '1m'; // 기본 시간봉
+
+// DOM 요소
+const indicesContainer = document.getElementById('indices');
+const tfButtons = document.querySelectorAll('.tf-btn');
+
 const globalTime = Math.floor(Date.now() / 1000);
 
 // 데이터 상태 저장소
@@ -23,7 +29,8 @@ indices.forEach(idx => {
         data: [],
         currentPrice: idx.basePrice,
         openPrice: idx.basePrice,
-        lastCandle: null
+        lastCandle: null,
+        historyLoaded: false
     };
 });
 
@@ -161,13 +168,15 @@ const updateOrderBook = (centerPrice) => {
 // 과거 데이터 패치 함수
 const fetchHistory = async (id) => {
     const state = appState[id];
+    if (state.historyLoaded) return;
+    state.historyLoaded = true;
+    
     try {
-        // 백엔드 URL 동적 감지 (현재 Vercel 배포 시 프록시 서버 주소 사용)
-        const backendUrl = import.meta.env.VITE_WS_URL 
-            ? import.meta.env.VITE_WS_URL.replace('ws', 'http') 
-            : 'http://localhost:8080';
-            
-        const res = await fetch(`${backendUrl}/api/history/${id}`);
+        // 백엔드 API에서 실제 과거 데이터 가져오기 (시간봉 파라미터 추가)
+        const apiUrl = import.meta.env.VITE_WS_URL 
+            ? import.meta.env.VITE_WS_URL.replace('ws', 'http') + `/api/history/${id}?tf=${activeTimeframe}`
+            : `http://localhost:8080/api/history/${id}?tf=${activeTimeframe}`;
+        const res = await fetch(apiUrl);
         const data = await res.json();
         
         if (data && data.length > 0) {
