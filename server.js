@@ -46,8 +46,7 @@ function connectToKisWs() {
     
     kisWs.on('open', () => {
         console.log('✅ KIS 실시간 서버 연결됨');
-        // KOSPI200 야간선물 등 원하는 종목을 구독하는 메시지 전송 로직이 필요합니다.
-        // 현재는 예시로 삼성전자(005930) 체결가 구독을 날려봅니다.
+        // 실전투자 국내업종 지수 실시간 체결가 구독 (코스피: 0001)
         const req = {
             header: {
                 approval_key: wsApprovalKey,
@@ -57,8 +56,8 @@ function connectToKisWs() {
             },
             body: {
                 input: {
-                    tr_id: "H0STCNT0", // 주식체결
-                    tr_key: "005930"   // 삼성전자
+                    tr_id: "H0UPCNT0", // 국내지수 실시간체결
+                    tr_key: "0001"     // 코스피 지수
                 }
             }
         };
@@ -74,15 +73,15 @@ function connectToKisWs() {
             return;
         }
 
-        // 실시간 체결 데이터 파싱 (복잡한 스트림 문자열 형태 | 구분자)
-        // 예: 0|H0STCNT0|001|005930^...
+        // 실시간 지수 체결 데이터 파싱
+        // 예: 0|H0UPCNT0|001|0001^104840^2581.68^2^...
         const parts = msg.split('|');
         if (parts.length >= 4) {
             const trid = parts[1];
-            if (trid === 'H0STCNT0') {
+            if (trid === 'H0UPCNT0') {
                 const dataParts = parts[3].split('^');
                 if (dataParts.length > 2) {
-                    const price = parseFloat(dataParts[2]); // 현재가
+                    const price = parseFloat(dataParts[2]); // 현재가 지수
                     
                     // 클라이언트(프론트엔드)로 데이터 브로드캐스팅
                     const payload = JSON.stringify({ type: 'price_update', id: 'kospi', price: price });
